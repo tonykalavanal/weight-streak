@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weight Streak</title>
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Streak">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='1' y='1' width='6' height='6' rx='1.5' fill='%239be9a8'/><rect x='9' y='1' width='6' height='6' rx='1.5' fill='%2340c463'/><rect x='1' y='9' width='6' height='6' rx='1.5' fill='%2330a14e'/><rect x='9' y='9' width='6' height='6' rx='1.5' fill='%23216e39'/></svg>">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0; --panel: #f6f8fa;
+    --l0: #eff2f5; --l1: #aceebb; --l2: #4ac26b; --l3: #2da44e; --l4: #116329;
+    --logged: #d1d9e0; --gain: #ffcecb;
+    --accent: #1f883d; --accent-fg: #ffffff; --danger: #cf222e;
+    --radius: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #f0f6fc; --muted: #9198a1; --border: #3d444d; --panel: #151b23;
+      --l0: #151b23; --l1: #033a16; --l2: #196c2e; --l3: #2ea043; --l4: #56d364;
+      --logged: #2a313c; --gain: #67060c;
+      --accent: #238636; --accent-fg: #ffffff; --danger: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  h2 { font-size: 16px; font-weight: 400; margin: 0 0 8px; }
+  h2 b { font-weight: 600; }
+  .muted { color: var(--muted); }
+  button, input {
+    font: inherit; color: inherit; background: var(--panel);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 12px;
+  }
+  button { cursor: pointer; font-weight: 500; }
+  button:hover { filter: brightness(0.97); }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: rgba(31,35,40,.15); }
+  button.link { background: none; border: none; padding: 0; color: var(--muted); text-decoration: underline; }
+  input:focus, button:focus-visible { outline: 2px solid #0969da; outline-offset: -1px; }
+
+  /* Log form */
+  .log {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 24px;
+  }
+  .log input[type=number] { width: 110px; font-size: 18px; font-weight: 600; padding: 6px 10px; }
+  .log input[type=date] { padding: 7px 8px; }
+  .log .hint { flex-basis: 100%; font-size: 12px; }
+
+  /* Contribution graph */
+  .graph-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 16px 10px; }
+  .graph-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .graph { display: grid; grid-template-columns: 28px auto; column-gap: 4px; width: max-content; }
+  .months { grid-column: 2; display: grid; grid-auto-flow: column; grid-auto-columns: 10px; gap: 3px; font-size: 12px; height: 18px; }
+  .months span { white-space: nowrap; }
+  .days { display: grid; grid-template-rows: repeat(7, 10px); gap: 3px; font-size: 11px; line-height: 10px; }
+  .cells { display: grid; grid-template-rows: repeat(7, 10px); grid-auto-flow: column; grid-auto-columns: 10px; gap: 3px; }
+  .cell { width: 10px; height: 10px; border-radius: 2px; background: var(--l0); outline: 1px solid rgba(27,31,35,.06); outline-offset: -1px; cursor: pointer; }
+  .cell.empty { visibility: hidden; }
+  .cell.future { background: transparent; outline: none; cursor: default; }
+  .cell[data-l="logged"] { background: var(--logged); }
+  .cell[data-l="gain"] { background: var(--gain); }
+  .cell[data-l="1"] { background: var(--l1); }
+  .cell[data-l="2"] { background: var(--l2); }
+  .cell[data-l="3"] { background: var(--l3); }
+  .cell[data-l="4"] { background: var(--l4); }
+  .cell.today { outline: 1.5px solid var(--fg); outline-offset: 0; }
+  .cell.selected { outline: 2px solid #0969da; outline-offset: 0; }
+  .graph-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; margin-top: 8px; }
+  .legend { display: flex; align-items: center; gap: 3px; }
+  .legend .cell { cursor: default; }
+  .legend .sep { width: 8px; }
+
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: #25292e; color: #fff; font-size: 12px; padding: 6px 8px; border-radius: 6px; white-space: nowrap;
+  }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 24px 0; }
+  .stat { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .stat .v { font-size: 22px; font-weight: 600; line-height: 1.2; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+
+  .progress { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 24px; }
+  .bar { height: 10px; border-radius: 5px; background: var(--l0); overflow: hidden; margin: 8px 0 4px; outline: 1px solid rgba(27,31,35,.06); }
+  .bar > div { height: 100%; background: var(--l3); border-radius: 5px; transition: width .4s; }
+  .bar-labels { display: flex; justify-content: space-between; font-size: 12px; }
+
+  .chart { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 24px; }
+  .chart svg { width: 100%; height: 160px; display: block; }
+
+  details { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  .row label { min-width: 120px; }
+  .row input[type=number] { width: 90px; }
+  .row input[type=text], .row input[type=password] { flex: 1; min-width: 200px; }
+  .small { font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .down { color: var(--l3); font-weight: 600; }
+  .up { color: var(--danger); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+    background: #25292e; color: #fff; padding: 10px 16px; border-radius: 8px; opacity: 0;
+    transition: all .25s; pointer-events: none; font-weight: 500; z-index: 20;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .pop { animation: pop .6s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.9); } 100% { transform: scale(1); } }
+  #syncState { font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🟩 Weight Streak</h1>
+    <span id="syncState" class="muted"></span>
+  </header>
+
+  <form class="log" id="logForm" autocomplete="off">
+    <input type="number" id="wIn" step="0.1" min="20" max="300" inputmode="decimal" placeholder="74.9" required aria-label="Weight in kg">
+    <span class="muted">kg</span>
+    <input type="date" id="dIn" aria-label="Date">
+    <button class="primary" type="submit">Log weight</button>
+    <button type="button" id="delBtn" class="link" hidden>Delete this day</button>
+    <span class="hint muted" id="hint"></span>
+  </form>
+
+  <h2 id="headline"></h2>
+  <div class="graph-box">
+    <div class="graph-scroll" id="scroll">
+      <div class="graph">
+        <div></div>
+        <div class="months" id="months"></div>
+        <div class="days muted"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+        <div class="cells" id="cells"></div>
+      </div>
+    </div>
+    <div class="graph-foot">
+      <span class="muted">Each square compares to your previous reading. Click a square to edit it.</span>
+      <span class="legend muted">
+        <span class="cell" data-l="logged" title="Logged, no loss"></span><span>logged</span><span class="sep"></span>
+        <span>Less</span>
+        <span class="cell" data-l="1"></span><span class="cell" data-l="2"></span><span class="cell" data-l="3"></span><span class="cell" data-l="4"></span>
+        <span>More loss</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="progress">
+    <div><b id="pTitle"></b> <span class="muted" id="pSub"></span></div>
+    <div class="bar"><div id="pBar" style="width:0"></div></div>
+    <div class="bar-labels muted"><span id="pStart"></span><span id="pGoal"></span></div>
+  </div>
+
+  <div class="chart">
+    <div><b>Trend</b> <span class="muted small">daily readings · 7-day average · goal</span></div>
+    <svg id="chart" viewBox="0 0 800 160" preserveAspectRatio="none"></svg>
+  </div>
+
+  <details>
+    <summary>History</summary>
+    <div style="max-height:320px;overflow:auto;margin-top:10px">
+      <table><thead><tr><th>Date</th><th class="num">Weight</th><th class="num">Change</th></tr></thead><tbody id="hist"></tbody></table>
+    </div>
+  </details>
+
+  <details>
+    <summary>Settings</summary>
+    <div class="row"><label for="sGoal">Goal (kg)</label><input type="number" id="sGoal" step="0.1"></div>
+    <div class="row"><label for="sHeight">Height (cm)</label><input type="number" id="sHeight" step="1"></div>
+    <div class="row"><label for="sRed"><input type="checkbox" id="sRed"> Show gains in red</label></div>
+    <div class="row small muted">Shades: light green &lt; 0.2 kg lost · 0.2–0.4 · 0.4–0.7 · darkest &gt; 0.7 kg.</div>
+    <div class="row">
+      <button type="button" id="exportBtn">Export backup</button>
+      <button type="button" id="importBtn">Import backup</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+  </details>
+
+  <details id="syncBox">
+    <summary>Sync across devices (optional)</summary>
+    <p class="small muted">Without sync, readings are saved only in this browser. To log from your phone and laptop, store them in a <b>private</b> GitHub repo. Create a fine-grained token at github.com → Settings → Developer settings → Fine-grained tokens, give it access to just that repo with <i>Contents: Read and write</i>, and paste it below. The token stays in this browser only.</p>
+    <div class="row"><label for="sRepo">Private repo</label><input type="text" id="sRepo" placeholder="username/weight-data"></div>
+    <div class="row"><label for="sToken">Token</label><input type="password" id="sToken" placeholder="github_pat_..."></div>
+    <div class="row"><button type="button" class="primary" id="syncSave">Save &amp; sync now</button><button type="button" id="syncOff" class="link">Turn off sync</button></div>
+  </details>
+</main>
+
+<div id="tip"></div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const KEY = "weightStreak.v1";
+  const DEFAULTS = {
+    entries: { "2026-11-08": { w: 74.9, t: 1762617600000 } }, // {date: {w, t}} — w:null is a deletion
+    settings: { goal: 63, height: 163, red: false, repo: "", token: "" }
+  };
+
+  // ---------- storage ----------
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        return { entries: d.entries || {}, settings: Object.assign({}, DEFAULTS.settings, d.settings || {}) };
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULTS));
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  let state = load();
+
+  // ---------- dates ----------
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = s => { const d = parse(s); return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; };
+  const todayIso = () => iso(new Date());
+
+  // ---------- derived data ----------
+  function readings() {
+    return Object.keys(state.entries)
+      .filter(k => state.entries[k] && typeof state.entries[k].w === "number")
+      .sort()
+      .map(k => ({ date: k, w: state.entries[k].w }));
+  }
+  function levelFor(delta) { // delta = kg lost vs previous reading (positive = loss)
+    if (delta == null) return "logged";
+    if (delta <= 0.0001) return delta < -0.0001 && state.settings.red ? "gain" : "logged";
+    if (delta < 0.2) return "1";
+    if (delta < 0.4) return "2";
+    if (delta < 0.7) return "3";
+    return "4";
+  }
+  function dayMap(list) {
+    const m = {};
+    list.forEach((r, i) => {
+      const prev = i > 0 ? list[i - 1] : null;
+      const delta = prev ? +(prev.w - r.w).toFixed(2) : null;
+      m[r.date] = { w: r.w, delta, prev, level: levelFor(delta) };
+    });
+    return m;
+  }
+
+  // ---------- render ----------
+  const $ = id => document.getElementById(id);
+  let selected = null;
+
+  function render() {
+    const list = readings();
+    const map = dayMap(list);
+    renderGraph(map);
+    renderStats(list, map);
+    renderChart(list);
+    renderHistory(list, map);
+    $("sGoal").value = state.settings.goal;
+    $("sHeight").value = state.settings.height;
+    $("sRed").checked = !!state.settings.red;
+    $("sRepo").value = state.settings.repo || "";
+    $("sToken").value = state.settings.token || "";
+    updateFormForDate();
+  }
+
+  function renderGraph(map) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const first = addDays(today, -364);
+    const start = addDays(first, -first.getDay()); // back to Sunday
+    const cells = $("cells"), months = $("months");
+    cells.innerHTML = ""; months.innerHTML = "";
+    let lossDays = 0;
+    const tIso = iso(today);
+    for (let d = new Date(start); d <= addDays(today, 6 - today.getDay()); d = addDays(d, 1)) {
+      const s = iso(d);
+      if (d.getDay() === 0) {
+        const span = document.createElement("span");
+        // label the week that contains the 1st of a month (like GitHub)
+        for (let k = 0; k < 7; k++) { const x = addDays(d, k); if (x.getDate() === 1 && x >= first && x <= today) { span.textContent = MONTHS[x.getMonth()]; break; } }
+        months.appendChild(span);
+      }
+      const c = document.createElement("span");
+      c.className = "cell";
+      if (d < first) c.classList.add("empty");
+      else if (d > today) c.classList.add("future");
+      else {
+        c.dataset.date = s;
+        const info = map[s];
+        if (info) { c.dataset.l = info.level; if (/^[1-4]$/.test(info.level)) lossDays++; }
+        if (s === tIso) c.classList.add("today");
+        if (s === selected) c.classList.add("selected");
+      }
+      cells.appendChild(c);
+    }
+    $("headline").innerHTML = `<b>${lossDays}</b> loss day${lossDays === 1 ? "" : "s"} in the last year`;
+    const sc = $("scroll"); const toEnd = () => { sc.scrollLeft = sc.scrollWidth; }; toEnd(); requestAnimationFrame(toEnd); window.addEventListener("load", toEnd, { once: true });
+  }
+
+  function stat(v, k) { return `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`; }
+
+  function renderStats(list, map) {
+    const { goal, height } = state.settings;
+    if (!list.length) { $("stats").innerHTML = stat("—", "Log your first reading above"); return; }
+    const startW = list[0].w, cur = list[list.length - 1].w;
+    const lost = startW - cur, toGo = Math.max(0, cur - goal);
+    const bmi = cur / Math.pow(height / 100, 2);
+
+    // logging streak: consecutive days with a reading, ending today (or yesterday if today not logged yet)
+    let streak = 0, d = new Date(); d.setHours(0, 0, 0, 0);
+    if (!map[iso(d)]) d = addDays(d, -1);
+    while (map[iso(d)]) { streak++; d = addDays(d, -1); }
+
+    // green streak: consecutive readings that were losses
+    let green = 0;
+    for (let i = list.length - 1; i > 0; i--) { if (map[list[i].date].delta > 0) green++; else break; }
+
+    const low = Math.min(...list.map(r => r.w));
+
+    // pace from 7-day averages, needs ~2 weeks of data
+    let paceTxt = "Needs ~2 weeks of data", etaTxt = "—";
+    const span = daysBetween(list[0].date, list[list.length - 1].date);
+    if (span >= 13) {
+      const avg = (endIso) => {
+        const pts = list.filter(r => { const g = daysBetween(r.date, endIso); return g >= 0 && g < 7; });
+        return pts.reduce((a, r) => a + r.w, 0) / pts.length;
+      };
+      const endIso = list[list.length - 1].date;
+      const startIso = iso(addDays(parse(endIso), -Math.min(span, 28) + 6));
+      const a1 = avg(startIso), a2 = avg(endIso);
+      const weeks = daysBetween(startIso, endIso) / 7;
+      const pace = (a1 - a2) / weeks;
+      paceTxt = `${pace >= 0 ? "−" : "+"}${Math.abs(pace).toFixed(2)} kg/wk`;
+      if (pace > 0.05 && toGo > 0) {
+        const eta = addDays(parse(endIso), Math.ceil(toGo / pace * 7));
+        etaTxt = `${MONTHS[eta.getMonth()]} ${eta.getFullYear()}`;
+      }
+    }
+
+    $("stats").innerHTML =
+      stat(`${cur.toFixed(1)} kg`, "Current") +
+      stat(`${lost >= 0.05 ? "−" : lost <= -0.05 ? "+" : ""}${Math.abs(lost).toFixed(1)} kg`, "Since start") +
+      stat(`${toGo.toFixed(1)} kg`, "To goal") +
+      stat(`${streak} day${streak === 1 ? "" : "s"}`, "Logging streak") +
+      stat(`${green}`, "Green in a row") +
+      stat(`${low.toFixed(1)} kg`, "Lowest yet") +
+      stat(paceTxt, "Pace (4-wk trend)") +
+      stat(etaTxt, "Goal at this pace") +
+      stat(bmi.toFixed(1), "BMI");
+
+    const pct = Math.max(0, Math.min(100, (startW - cur) / (startW - goal) * 100 || 0));
+    $("pTitle").textContent = toGo <= 0 ? "Goal reached 🎉" : `${pct.toFixed(0)}% of the way to ${goal} kg`;
+    $("pSub").textContent = toGo <= 0 ? "" : `· next milestone ${Math.ceil(cur - 1).toFixed(0)} kg`;
+    $("pBar").style.width = pct + "%";
+    $("pStart").textContent = `${startW.toFixed(1)} kg (${fmtDate(list[0].date)})`;
+    $("pGoal").textContent = `${goal} kg`;
+  }
+
+  function renderChart(list) {
+    const svg = $("chart"), W = 800, H = 160, P = 8;
+    if (list.length < 2) { svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="currentColor" opacity=".5" font-size="14">Log a few days to see your trend</text>`; return; }
+    const goal = state.settings.goal;
+    const t0 = parse(list[0].date), t1 = parse(list[list.length - 1].date);
+    const ws = list.map(r => r.w).concat(goal);
+    const lo = Math.min(...ws) - 0.5, hi = Math.max(...ws) + 0.5;
+    const x = s => P + (parse(s) - t0) / Math.max(1, t1 - t0) * (W - 2 * P);
+    const y = w => P + (hi - w) / (hi - lo) * (H - 2 * P);
+    const avgPts = list.map(r => {
+      const pts = list.filter(q => { const g = daysBetween(q.date, r.date); return g >= 0 && g < 7; });
+      return [x(r.date), y(pts.reduce((a, q) => a + q.w, 0) / pts.length)];
+    });
+    const css = getComputedStyle(document.documentElement);
+    svg.innerHTML =
+      `<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" stroke="${css.getPropertyValue("--l3")}" stroke-dasharray="6 5" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` +
+      `<polyline fill="none" stroke="${css.getPropertyValue("--muted")}" stroke-opacity=".45" stroke-width="1" vector-effect="non-scaling-stroke" points="${list.map(r => `${x(r.date)},${y(r.w)}`).join(" ")}"/>` +
+      `<polyline fill="none" stroke="${css.getPropertyValue("--l3")}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${avgPts.map(p => p.join(",")).join(" ")}"/>`;
+  }
+
+  function renderHistory(list, map) {
+    $("hist").innerHTML = list.slice().reverse().map(r => {
+      const d = map[r.date].delta;
+      const ch = d == null ? "start" : d > 0 ? `<span class="down">−${d.toFixed(1)}</span>` : d < 0 ? `<span class="up">+${(-d).toFixed(1)}</span>` : "0.0";
+      return `<tr><td>${fmtDate(r.date)}</td><td class="num">${r.w.toFixed(1)}</td><td class="num">${ch}</td></tr>`;
+    }).join("");
+  }
+
+  // ---------- form ----------
+  function updateFormForDate() {
+    const s = $("dIn").value || todayIso();
+    const e = state.entries[s];
+    const has = e && typeof e.w === "number";
+    $("delBtn").hidden = !has;
+    if (has && document.activeElement !== $("wIn")) $("wIn").value = e.w;
+    else if (!has && document.activeElement !== $("wIn")) $("wIn").value = "";
+    const list = readings();
+    const prev = list.filter(r => r.date < s).pop();
+    $("hint").textContent = has
+      ? `You logged ${e.w.toFixed(1)} kg on ${fmtDate(s)}. Change it and press Log to update.`
+      : prev ? `Last reading: ${prev.w.toFixed(1)} kg on ${fmtDate(prev.date)}. Anything below that turns the square green.`
+             : "Enter your morning weight.";
+  }
+
+  $("dIn").value = todayIso();
+  $("dIn").max = todayIso();
+  $("dIn").addEventListener("change", () => { selected = $("dIn").value; render(); });
+
+  $("logForm").addEventListener("submit", ev => {
+    ev.preventDefault();
+    const w = parseFloat($("wIn").value);
+    const s = $("dIn").value || todayIso();
+    if (!(w > 20 && w < 300)) return;
+    state.entries[s] = { w: Math.round(w * 10) / 10, t: Date.now() };
+    save();
+    $("wIn").blur();
+    render();
+    const info = dayMap(readings())[s];
+    const cell = document.querySelector(`.cell[data-date="${s}"]`);
+    if (cell) { cell.classList.add("pop"); setTimeout(() => cell.classList.remove("pop"), 700); }
+    if (info.delta == null) toast("First square logged. Let's paint it green 🟩");
+    else if (info.delta > 0) toast(`−${info.delta.toFixed(1)} kg · that's a green square 🟩`);
+    else if (info.delta === 0) toast("Same as last time · logged ✓");
+    else toast(`Logged ✓ Day-to-day ups are normal — water weight. Keep going.`);
+    push();
+  });
+
+  $("delBtn").addEventListener("click", () => {
+    const s = $("dIn").value;
+    if (!state.entries[s]) return;
+    state.entries[s] = { w: null, t: Date.now() };
+    save(); render(); toast("Deleted"); push();
+  });
+
+  let toastT;
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+
+  // ---------- tooltip & click ----------
+  const tip = $("tip");
+  $("cells").addEventListener("mousemove", ev => {
+    const c = ev.target.closest(".cell[data-date]");
+    if (!c) { tip.style.display = "none"; return; }
+    const s = c.dataset.date, info = dayMap(readings())[s];
+    let txt = `No reading on ${fmtDate(s)}`;
+    if (info) {
+      const d = info.delta;
+      txt = `${info.w.toFixed(1)} kg on ${fmtDate(s)}` + (d == null ? " · start" : d > 0 ? ` · −${d.toFixed(1)} kg` : d < 0 ? ` · +${(-d).toFixed(1)} kg` : " · no change");
+    }
+    tip.textContent = txt; tip.style.display = "block";
+    const r = c.getBoundingClientRect();
+    tip.style.left = Math.max(4, Math.min(window.innerWidth - tip.offsetWidth - 4, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
+    tip.style.top = (r.top - tip.offsetHeight - 6) + "px";
+  });
+  $("cells").addEventListener("mouseleave", () => tip.style.display = "none");
+  $("cells").addEventListener("click", ev => {
+    const c = ev.target.closest(".cell[data-date]");
+    if (!c) return;
+    selected = c.dataset.date; $("dIn").value = selected; render();
+    $("wIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // ---------- settings ----------
+  $("sGoal").addEventListener("change", e => { const v = parseFloat(e.target.value); if (v > 20) { state.settings.goal = v; save(); render(); push(); } });
+  $("sHeight").addEventListener("change", e => { const v = parseFloat(e.target.value); if (v > 50) { state.settings.height = v; save(); render(); push(); } });
+  $("sRed").addEventListener("change", e => { state.settings.red = e.target.checked; save(); render(); push(); });
+
+  $("exportBtn").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify({ entries: state.entries, settings: { goal: state.settings.goal, height: state.settings.height, red: state.settings.red } }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `weight-streak-${todayIso()}.json`; a.click();
+  });
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const d = JSON.parse(await f.text());
+      merge(d); save(); render(); toast("Backup imported"); push();
+    } catch (err) { toast("Couldn't read that file"); }
+  });
+
+  // ---------- optional GitHub sync (private repo, data.json) ----------
+  function merge(remote) {
+    const re = (remote && remote.entries) || {};
+    for (const k in re) {
+      const l = state.entries[k], r = re[k];
+      if (!r) continue;
+      if (typeof r === "number") { if (!l) state.entries[k] = { w: r, t: 0 }; continue; } // plain {date: kg} also accepted
+      if (!l || (r.t || 0) > (l.t || 0)) state.entries[k] = r;
+    }
+    if (remote && remote.settings) {
+      const s = remote.settings;
+      if (s.goal) state.settings.goal = s.goal;
+      if (s.height) state.settings.height = s.height;
+      if (typeof s.red === "boolean") state.settings.red = s.red;
+    }
+  }
+  const b64e = s => btoa(unescape(encodeURIComponent(s)));
+  const b64d = s => decodeURIComponent(escape(atob(s.replace(/\n/g, ""))));
+  const syncOn = () => state.settings.repo && state.settings.token;
+  const api = p => `https://api.github.com/repos/${state.settings.repo}/contents/${p}`;
+  const hdrs = () => ({ Authorization: `Bearer ${state.settings.token}`, Accept: "application/vnd.github+json" });
+  function setSync(msg) { $("syncState").textContent = msg; }
+
+  async function pull() {
+    if (!syncOn()) { setSync("Saved in this browser"); return null; }
+    setSync("Syncing…");
+    const res = await fetch(api("data.json") + `?t=${Date.now()}`, { headers: hdrs(), cache: "no-store" });
+    if (res.status === 404) return { sha: null };
+    if (!res.ok) throw new Error(`GitHub said ${res.status}`);
+    const j = await res.json();
+    merge(JSON.parse(b64d(j.content)));
+    save();
+    return { sha: j.sha };
+  }
+  let pushing = Promise.resolve();
+  function push() {
+    if (!syncOn()) { setSync("Saved in this browser"); return; }
+    pushing = pushing.then(async () => {
+      try {
+        const { sha } = await pull() || {};
+        const body = {
+          message: `log ${todayIso()}`,
+          content: b64e(JSON.stringify({ entries: state.entries, settings: { goal: state.settings.goal, height: state.settings.height, red: state.settings.red } }, null, 1))
+        };
+        if (sha) body.sha = sha;
+        const res = await fetch(api("data.json"), { method: "PUT", headers: hdrs(), body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(`GitHub said ${res.status}`);
+        setSync("Synced ✓");
+        render();
+      } catch (e) { setSync("Sync failed — saved locally"); console.warn(e); }
+    });
+  }
+  $("syncSave").addEventListener("click", () => {
+    state.settings.repo = $("sRepo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "");
+    state.settings.token = $("sToken").value.trim();
+    save(); push();
+  });
+  $("syncOff").addEventListener("click", () => {
+    state.settings.repo = ""; state.settings.token = ""; save(); render(); setSync("Saved in this browser");
+  });
+
+  render();
+  if (syncOn()) pull().then(() => { render(); setSync("Synced ✓"); }).catch(() => setSync("Sync failed — saved locally"));
+  else setSync("Saved in this browser");
+})();
+</script>
+</body>
+</html>
